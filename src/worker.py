@@ -27,7 +27,7 @@ from utils.biggan_utils import interp
 from utils.sample import sample_latents, sample_1hot, make_mask, target_class_sampler
 from utils.misc import *
 from utils.losses import calc_derv4gp, calc_derv4dra, calc_derv, latent_optimise, set_temperature
-from utils.losses import Conditional_Contrastive_loss, Proxy_NCA_loss, NT_Xent_loss
+from utils.losses import Conditional_Contrastive_loss, Proxy_NCA_loss, NT_Xent_loss, Data2Data_Cross_Entropy_loss
 from utils.diff_aug import DiffAugment
 from utils.cr_diff_aug import CR_DiffAug
 
@@ -108,6 +108,7 @@ class make_worker(object):
         self.contrastive_lambda = cfgs.contrastive_lambda
         self.cond_lambda = cfgs.cond_lambda
         self.uncond_lambda = cfgs.uncond_lambda
+        self.m_p = cfgs.m_p
         self.margin = cfgs.margin
         self.tempering_type = cfgs.tempering_type
         self.tempering_step = cfgs.tempering_step
@@ -193,6 +194,8 @@ class make_worker(object):
                 self.NCA_criterion = Proxy_NCA_loss(self.rank, self.embedding_layer, self.num_classes, self.batch_size)
             elif self.contrastive_type == 'NT_Xent':
                 self.NT_Xent_criterion = NT_Xent_loss(self.rank, self.batch_size)
+            elif self.contrastive_type == 'ReACGAN':
+                self.data2data_cross_entropy_criterion = Data2Data_Cross_Entropy_loss(self.rank, self.batch_size, self.m_p, self.pos_collected_numerator)
         else:
             pass
 
@@ -309,6 +312,9 @@ class make_worker(object):
                                 elif self.contrastive_type == "ContraGAN":
                                     real_cls_mask = make_mask(real_labels, self.num_classes, self.rank)
                                     dis_contra_loss = self.contrastive_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t, self.margin)
+                                elif self.contrastive_type == "ReACGAN":
+                                    real_cls_mask = 1 - make_mask(real_labels, self.num_classes, self.rank)
+                                    dis_contra_loss = self.data2data_cross_entropy_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t)
                                 dis_acml_loss += self.contrastive_lambda * dis_contra_loss
                                 dis_loss_log['dis_contra_loss'] = dis_contra_loss.item()
                             self.writer.add_scalars('D_loss', dis_loss_log, step_count)
@@ -511,6 +517,9 @@ class make_worker(object):
                                     fake_images_aug = CR_DiffAug(fake_images)
                                     _, dis_out_fake_aug, _, _, cls_embed_fake_aug = self.dis_model(fake_images_aug, fake_labels)
                                     gen_contra_loss = self.NT_Xent_criterion(cls_embed_fake, cls_embed_fake_aug, t)
+                                elif self.contrastive_type == "ReACGAN":
+                                    real_cls_mask = 1 - make_mask(real_labels, self.num_classes, self.rank)
+                                    dis_contra_loss = self.data2data_cross_entropy_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t)
                                 gen_acml_loss += self.contrastive_lambda * gen_contra_loss
                                 gen_loss_log['gen_contra_loss'] = gen_contra_loss.item()
                             self.writer.add_scalars('G_loss', gen_loss_log, step_count)

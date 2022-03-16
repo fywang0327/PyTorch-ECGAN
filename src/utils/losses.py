@@ -293,6 +293,52 @@ class NT_Xent_loss(torch.nn.Module):
         loss = self.criterion(logits, labels)
         return loss / (2 * self.batch_size)
 
+class Data2Data_Cross_Entropy_loss(torch.nn.Module):
+    def __init__(self, device, batch_size, m_p, pos_collected_numerator):
+        super(Data2Data_Cross_Entropy_loss, self).__init__()
+        self.device = device
+        self.batch_size = batch_size
+        self.m_p = m_p
+        self.pos_collected_numerator = pos_collected_numerator
+        self.calculate_similarity_matrix = self._calculate_similarity_matrix()
+        self.cosine_similarity = torch.nn.CosineSimilarity(dim=-1)
+
+
+    def _calculate_similarity_matrix(self):
+        return self._cosine_simililarity_matrix
+
+
+    def remove_diag(self, M):
+        h, w = M.shape
+        assert h==w, "h and w should be same"
+        mask = np.ones((h, w)) - np.eye(h)
+        mask = torch.from_numpy(mask)
+        mask = (mask).type(torch.bool).to(self.device)
+        return M[mask].view(h, -1)
+
+
+    def _cosine_simililarity_matrix(self, x, y):
+        v = self.cosine_similarity(x.unsqueeze(1), y.unsqueeze(0))
+        return v
+
+
+    def forward(self, inst_embed, proxy, negative_mask, labels, temperature):
+        similarity_matrix = self.calculate_similarity_matrix(inst_embed, inst_embed) + self.m_p - 1
+        similarity_matrix = self.remove_diag(similarity_matrix/temperature)
+        similarity_max, _ = torch.max(similarity_matrix, dim=1, keepdim=True)
+        similarity_matrix = F.relu(similarity_matrix) - similarity_max.detach()
+
+        inst2proxy_positive = self.cosine_similarity(inst_embed, proxy)
+        if self.pos_collected_numerator:
+            mask_4_remove_negatives = negative_mask[labels]
+            mask_4_remove_negatives = self.remove_diag(mask_4_remove_negatives)
+            improved_sim_matrix = torch.exp(instance_zone)*mask_4_remove_negatives
+
+        pos_attr = F.relu((self.m_p - inst2proxy_positive)/temperature)
+        neg_repul = torch.log(torch.exp(-pos_attr) + improved_sim_matrix.sum(dim=1))
+        criterion = pos_attr + neg_repul
+        return criterion.mean()
+
 
 def calc_derv4gp(netD, conditional_strategy, real_data, fake_data, real_labels, device):
     batch_size, c, h, w = real_data.shape
