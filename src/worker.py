@@ -313,7 +313,7 @@ class make_worker(object):
                                     real_cls_mask = make_mask(real_labels, self.num_classes, self.rank)
                                     dis_contra_loss = self.contrastive_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t, self.margin)
                                 elif self.contrastive_type == "ReACGAN":
-                                    real_cls_mask = make_mask(real_labels, self.num_classes, self.rank)
+                                    real_cls_mask = 1 - make_mask(real_labels, self.num_classes, self.rank)
                                     dis_contra_loss = self.data2data_cross_entropy_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t)
                                 dis_acml_loss += self.contrastive_lambda * dis_contra_loss
                                 dis_loss_log['dis_contra_loss'] = dis_contra_loss.item()
@@ -518,8 +518,8 @@ class make_worker(object):
                                     _, dis_out_fake_aug, _, _, cls_embed_fake_aug = self.dis_model(fake_images_aug, fake_labels)
                                     gen_contra_loss = self.NT_Xent_criterion(cls_embed_fake, cls_embed_fake_aug, t)
                                 elif self.contrastive_type == "ReACGAN":
-                                    fake_cls_mask = make_mask(fake_labels, self.num_classes, self.rank)
-                                    gen_contra_loss = self.data2data_cross_entropy_criterion(cls_embed_fake, cls_proxies_fake, fake_cls_mask, fake_labels, t)
+                                    real_cls_mask = 1 - make_mask(real_labels, self.num_classes, self.rank)
+                                    dis_contra_loss = self.data2data_cross_entropy_criterion(cls_embed_real, cls_proxies_real, real_cls_mask, real_labels, t)
                                 gen_acml_loss += self.contrastive_lambda * gen_contra_loss
                                 gen_loss_log['gen_contra_loss'] = gen_contra_loss.item()
                             self.writer.add_scalars('G_loss', gen_loss_log, step_count)
