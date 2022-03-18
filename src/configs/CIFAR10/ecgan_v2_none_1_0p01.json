@@ -57,7 +57,7 @@
       "uncond_lambda": 1,
       "contrastive_type": "ReACGAN",
       "m_p": 0.98,
-      "contrastive_lambda": 0.0,
+      "contrastive_lambda": 1.0,
       "margin": 0.0,
       "tempering_type": "discrete",
       "tempering_step": 1,
